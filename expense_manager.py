@@ -13,74 +13,80 @@ import csv
 from datetime import datetime
 import pandas as pd
 
-# File names
+# Files to store data permanently on disk
 EXPENSES_FILE = "expenses.csv"
 BUDGET_FILE = "budget.txt"
 
-# Global variable to store monthly budget in memory
+# Global variable to keep track of monthly budget in program memory
 monthly_budget = None
 
 
 def load_budget():
-    """Load previously saved monthly budget if budget.txt exists."""
+    """Load the saved budget from budget.txt when the program starts."""
     if os.path.exists(BUDGET_FILE):
         try:
-            with open(BUDGET_FILE, "r", encoding="utf-8") as f:
-                data = f.read().strip()
+            with open(BUDGET_FILE, "r") as file:
+                data = file.read().strip()
                 if data:
                     return float(data)
-        except (ValueError, IOError):
+        except:
             return None
     return None
 
 
 def save_budget_to_file(budget):
-    """Save the monthly budget to budget.txt."""
+    """Save the budget value into budget.txt."""
     try:
-        with open(BUDGET_FILE, "w", encoding="utf-8") as f:
-            f.write(str(budget))
-    except IOError:
+        with open(BUDGET_FILE, "w") as file:
+            file.write(str(budget))
+    except:
         pass
 
 
-def format_amount(value):
-    """Helper to format numbers cleanly (e.g. 1000 instead of 1000.0 when whole number)."""
-    if value == int(value):
-        return str(int(value))
-    return f"{value:.2f}"
+def format_amount(val):
+    """Format numbers cleanly: 1000 instead of 1000.0, but 10.50 for decimals."""
+    if val == int(val):
+        return str(int(val))
+    else:
+        return f"{val:.2f}"
 
 
 def validate_date(date_str):
-    """Validate that date is strictly in YYYY-MM-DD format."""
+    """Check if date is strictly in YYYY-MM-DD format and is a real calendar date."""
     try:
         parts = date_str.split("-")
+        # Check if there are 3 parts (Year, Month, Day)
         if len(parts) != 3:
             return False
-        # Year must be 4 digits, month and day must be 2 digits
+        
+        # Year must be 4 digits, Month must be 2 digits, Day must be 2 digits
         if len(parts[0]) != 4 or len(parts[1]) != 2 or len(parts[2]) != 2:
             return False
+        
+        # Check if it is a valid date (e.g. rejects 2026-02-30)
         datetime.strptime(date_str, "%Y-%m-%d")
         return True
-    except ValueError:
+    except:
         return False
 
 
 def validate_amount(amount_str):
-    """Validate that amount is a valid positive number."""
+    """Check if entered amount is a positive number."""
     try:
         val = float(amount_str)
         if val > 0:
             return True, val
-        return False, None
-    except ValueError:
+        else:
+            return False, None
+    except:
         return False, None
 
 
 def set_budget():
-    """Menu Option 1: Lets user set monthly budget."""
+    """Menu Option 1: Ask user for monthly budget and save it."""
     global monthly_budget
     user_input = input("Enter monthly budget: ").strip()
-    
+
     is_valid, val = validate_amount(user_input)
     if not is_valid:
         print("Invalid amount. Amount must be a positive number.")
@@ -92,26 +98,31 @@ def set_budget():
 
 
 def save_expense_to_csv(date_str, category, amount):
-    """Append a new expense record using a dictionary and CSV writer."""
+    """Save a new expense row to expenses.csv using a Python Dictionary."""
     file_exists = os.path.exists(EXPENSES_FILE) and os.path.getsize(EXPENSES_FILE) > 0
-    
-    # Using dictionary concept to structure the expense record
-    expense_record = {
+
+    # Using Python Dictionary concept to structure the record
+    expense_dict = {
         "Date": date_str,
         "Category": category,
         "Amount": amount
     }
 
-    with open(EXPENSES_FILE, mode="a", newline="", encoding="utf-8") as file:
-        fieldnames = ["Date", "Category", "Amount"]
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
+    # Open CSV in append mode ('a') so older records are not deleted
+    with open(EXPENSES_FILE, mode="a", newline="") as file:
+        headers = ["Date", "Category", "Amount"]
+        writer = csv.DictWriter(file, fieldnames=headers)
+        
+        # Write headers only if file is newly created or empty
         if not file_exists:
             writer.writeheader()
-        writer.writerow(expense_record)
+            
+        writer.writerow(expense_dict)
 
 
 def get_spending_data():
-    """Read expenses with Pandas DataFrame and compute totals using groupby()."""
+    """Read expenses.csv using Pandas and calculate sums using groupby()."""
+    # If file doesn't exist or has 0 bytes, return empty values
     if not os.path.exists(EXPENSES_FILE) or os.path.getsize(EXPENSES_FILE) == 0:
         return None, 0.0, {}
 
@@ -119,8 +130,7 @@ def get_spending_data():
     if df.empty:
         return df, 0.0, {}
 
-    # Category-wise spending using groupby()
-    # Preserving the first appearance order of categories
+    # Using Pandas groupby() concept to sum amount by category
     grouped = df.groupby("Category", sort=False)["Amount"].sum()
     category_dict = grouped.to_dict()
 
@@ -129,7 +139,7 @@ def get_spending_data():
 
 
 def print_budget_status(total_spent, budget):
-    """Display total spent, remaining budget and warnings (80% warning and >100% exceeded)."""
+    """Show spent amount, remaining budget, and warning alerts."""
     if budget is None or budget <= 0:
         print(f"Total spent: {format_amount(total_spent)}")
         return
@@ -139,6 +149,7 @@ def print_budget_status(total_spent, budget):
 
     percentage = (total_spent / budget) * 100.0
 
+    # Check alert conditions
     if percentage > 100.0:
         print(f"Budget exceeded! ({percentage:.2f}% of the budget used).")
     elif percentage == 100.0:
@@ -148,14 +159,14 @@ def print_budget_status(total_spent, budget):
 
 
 def add_expense():
-    """Menu Option 2: Add expense with input validation and budget status."""
+    """Menu Option 2: Add an expense with validation and show budget status."""
     raw_input = input("Enter expense (Date, Category, Amount or Date): ").strip()
     if not raw_input:
         print("Input cannot be empty.")
         print("Expense not saved.")
         return
 
-    # Check if user entered comma-separated input or step-by-step
+    # Check if user entered all 3 values separated by comma
     if "," in raw_input:
         parts = [p.strip() for p in raw_input.split(",")]
         if len(parts) >= 3:
@@ -167,8 +178,8 @@ def add_expense():
             print("Expense not saved.")
             return
     else:
+        # Otherwise take input step by step
         date_str = raw_input
-        # Validate date early if entering step-by-step
         if not validate_date(date_str):
             print("Invalid date. Use YYYY-MM-DD.")
             print("Expense not saved.")
@@ -183,30 +194,32 @@ def add_expense():
         return
 
     # Validate amount
-    is_valid_amount, amount = validate_amount(amount_str)
-    if not is_valid_amount:
+    is_valid, amount = validate_amount(amount_str)
+    if not is_valid:
         print("Invalid amount. Amount must be a positive number.")
         print("Expense not saved.")
         return
 
-    # Save to CSV
+    # Save data to CSV
     save_expense_to_csv(date_str, category, amount)
     print("Expense saved.")
 
-    # Show total spent and remaining budget
+    # Show updated total and budget status
     _, total_spent, _ = get_spending_data()
     print_budget_status(total_spent, monthly_budget)
 
 
 def show_category_summary():
-    """Menu Option 3: Display category-wise spending using groupby()."""
+    """Menu Option 3: Display category-wise totals using Pandas groupby result."""
     _, _, category_dict = get_spending_data()
     if not category_dict:
         print("No expenses recorded yet.")
         return
 
-    summary_parts = [f"{cat}: {format_amount(amt)}" for cat, amt in category_dict.items()]
-    print(" | ".join(summary_parts))
+    parts = []
+    for cat, amt in category_dict.items():
+        parts.append(f"{cat}: {format_amount(amt)}")
+    print(" | ".join(parts))
 
 
 def show_report():
@@ -218,19 +231,22 @@ def show_report():
             print(f"Monthly budget: {format_amount(monthly_budget)} | Remaining: {format_amount(monthly_budget)}")
         return
 
-    # Category summary line
-    summary_parts = [f"{cat}: {format_amount(amt)}" for cat, amt in category_dict.items()]
-    print(" | ".join(summary_parts))
+    # Display category breakdown
+    parts = []
+    for cat, amt in category_dict.items():
+        parts.append(f"{cat}: {format_amount(amt)}")
+    print(" | ".join(parts))
 
-    # Total spent, remaining budget, and warnings
+    # Display total, remaining and warning message
     print_budget_status(total_spent, monthly_budget)
 
 
 def main():
     global monthly_budget
-    # Load previously stored budget if any
+    # Load previously saved budget if it exists
     monthly_budget = load_budget()
 
+    # Main menu loop
     while True:
         print("\n==========================================")
         print("   PERSONAL EXPENSE & BUDGET MANAGER")
@@ -259,6 +275,6 @@ def main():
             print("Invalid choice. Please select from 1 to 5.")
 
 
+# Run the program only when executed directly
 if __name__ == "__main__":
     main()
-
